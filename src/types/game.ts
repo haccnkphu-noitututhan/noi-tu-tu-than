@@ -33,7 +33,8 @@ export interface ReactionItem {
 export interface GameState {
   roomId: string;
   mode: GameMode;
-  status: 'lobby' | 'playing' | 'gameover';
+  status: 'lobby' | 'countdown' | 'playing' | 'gameover';
+  countdownValue?: number;
   players: Player[];
   currentTurnIndex: number;
   currentWord: string;

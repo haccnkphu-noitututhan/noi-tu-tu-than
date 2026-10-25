@@ -181,6 +181,14 @@ function GameApp() {
     setIsBgmOn(next);
   };
 
+  // Safe Chat Message Adder (Prevents duplicate messages on sender's device)
+  const addChatMessageSafely = (msg: ChatMessage) => {
+    setChatMessages(prev => {
+      if (prev.some(m => m.id === msg.id)) return prev;
+      return [...prev, msg];
+    });
+  };
+
   // Spawn a floating reaction on screen
   const spawnReactionEffect = (type: ReactionType, authorName: string) => {
     const newR: FloatingReaction = {
@@ -212,10 +220,10 @@ function GameApp() {
     }
   };
 
-  // Send Direct Chat Message
+  // Send Direct Chat Message (Deduplicated with unique ID & broadcast exclusion)
   const handleSendMessage = (text: string) => {
     const newMsg: ChatMessage = {
-      id: Math.random().toString(36).substring(2, 9),
+      id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
       senderId: myPlayerId,
       senderName: myName,
       senderAvatar: myAvatar,
@@ -223,7 +231,7 @@ function GameApp() {
       timestamp: Date.now(),
     };
 
-    setChatMessages(prev => [...prev, newMsg]);
+    addChatMessageSafely(newMsg);
 
     const netMsg: NetworkMessage = {
       type: 'CHAT_MESSAGE',
@@ -251,13 +259,11 @@ function GameApp() {
         return updated;
       });
     } else {
-      // Guest sends UPDATE_PROFILE action to Host to broadcast to all peers
       P2PNetwork.sendToHost({
         type: 'PLAYER_ACTION',
         action: 'UPDATE_PROFILE',
         payload: { id: myPlayerId, name: newName, avatar: newAvatar }
       });
-      // Local immediate preview
       setGameState((prev) => ({
         ...prev,
         players: prev.players.map((p) =>
@@ -390,6 +396,13 @@ function GameApp() {
       { id: myPlayerId, name: myName, avatar: myAvatar },
       (msg) => {
         if (msg.type === 'STATE_UPDATE') {
+          // Play audio tick if in countdown
+          if (msg.state.status === 'countdown') {
+            AudioManager.playTick(1.6 + (3 - (msg.state.countdownValue || 3)) * 0.4);
+          } else if (msg.state.status === 'playing' && gameState.status === 'countdown') {
+            AudioManager.playDing();
+          }
+
           setGameState(msg.state);
           // Sync punishments from host
           if (msg.state.roundPunishments && Array.isArray(msg.state.roundPunishments)) {
@@ -402,7 +415,7 @@ function GameApp() {
           AudioManager.playReactionSound(msg.effectType);
           spawnReactionEffect(msg.effectType as ReactionType, msg.authorName || 'Đối thủ');
         } else if (msg.type === 'CHAT_MESSAGE') {
-          setChatMessages(prev => [...prev, msg.message]);
+          addChatMessageSafely(msg.message);
         }
       }
     );
@@ -497,7 +510,8 @@ function GameApp() {
                 msg.payload.word,
                 msg.payload.isTrap,
                 msg.payload.isDeadEnd,
-                msg.payload.endingSyllable
+                msg.payload.endingSyllable,
+                msg.payload.senderId
               );
             }
           } else if (msg.type === 'REACTION') {
@@ -505,8 +519,9 @@ function GameApp() {
             spawnReactionEffect(msg.effectType as ReactionType, msg.authorName || 'Đối thủ');
             P2PNetwork.broadcast(msg);
           } else if (msg.type === 'CHAT_MESSAGE') {
-            setChatMessages(prev => [...prev, msg.message]);
-            P2PNetwork.broadcast(msg);
+            addChatMessageSafely(msg.message);
+            // Broadcast to other peers excluding the sender to avoid echo duplicate
+            P2PNetwork.broadcast(msg, peerId);
           }
         },
         (_peerId) => {
@@ -546,17 +561,23 @@ function GameApp() {
     };
   }, [isHost, myPlayerId]);
 
-  // Start Match with a completely RANDOM starter word!
+  // Start Match with a dramatic 3-second synchronized countdown!
   const handleStartGame = () => {
+    if (!isHost) return;
+
     const randomStarter = gameState.trapWordsSecret.length > 0 && Math.random() < 0.25
       ? gameState.trapWordsSecret[Math.floor(Math.random() * gameState.trapWordsSecret.length)]
       : getRandomStarterWord();
 
     const maxTime = gameState.mode === 'bomb' ? 8 : 10;
 
-    const newState: GameState = {
+    let count = 3;
+    AudioManager.playTick(1.6);
+
+    const countdownState: GameState = {
       ...gameState,
-      status: 'playing',
+      status: 'countdown',
+      countdownValue: count,
       currentWord: randomStarter,
       history: [{
         word: randomStarter,
@@ -579,9 +600,32 @@ function GameApp() {
     };
 
     setAnnouncement('');
-    setGameState(newState);
-    if (isHost) P2PNetwork.broadcast({ type: 'STATE_UPDATE', state: newState });
-    AudioManager.playDing();
+    setGameState(countdownState);
+    P2PNetwork.broadcast({ type: 'STATE_UPDATE', state: countdownState });
+
+    const timer = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        AudioManager.playTick(1.6 + (3 - count) * 0.4);
+        setGameState(prev => {
+          const next = { ...prev, countdownValue: count };
+          P2PNetwork.broadcast({ type: 'STATE_UPDATE', state: next });
+          return next;
+        });
+      } else {
+        clearInterval(timer);
+        AudioManager.playDing();
+        setGameState(prev => {
+          const playState: GameState = {
+            ...prev,
+            status: 'playing',
+            countdownValue: 0,
+          };
+          P2PNetwork.broadcast({ type: 'STATE_UPDATE', state: playState });
+          return playState;
+        });
+      }
+    }, 1000);
   };
 
   // Turn timer loop: Host runs authoritative timer and penalizes timeout (-1 HP, -5 pts)
@@ -789,12 +833,20 @@ function GameApp() {
     newWord: string,
     isTrap?: boolean,
     isDeadEnd?: boolean,
-    endingSyllable?: string
+    endingSyllable?: string,
+    senderId?: string
   ) => {
     setGameState(prev => {
       if (prev.status !== 'playing') return prev;
-      const activeIdx = prev.currentTurnIndex;
+
+      // Identify the submitting player safely
+      let activeIdx = prev.currentTurnIndex;
+      if (senderId) {
+        const found = prev.players.findIndex(p => p.id === senderId);
+        if (found !== -1) activeIdx = found;
+      }
       const activePlayer = prev.players[activeIdx];
+      if (!activePlayer) return prev;
 
       const newHistoryItem = {
         word: newWord,
@@ -906,7 +958,7 @@ function GameApp() {
     });
   };
 
-  // Submit word from GameArena (handles Host vs Guest routing)
+  // Submit word from GameArena (handles Host vs Guest routing with senderId)
   const handleArenaSubmitWord = (
     word: string,
     isTrap?: boolean,
@@ -914,12 +966,12 @@ function GameApp() {
     endingSyllable?: string
   ) => {
     if (isHost) {
-      handleWordSubmit(word, isTrap, isDeadEnd, endingSyllable);
+      handleWordSubmit(word, isTrap, isDeadEnd, endingSyllable, myPlayerId);
     } else {
       P2PNetwork.sendToHost({
         type: 'PLAYER_ACTION',
         action: 'SUBMIT_WORD',
-        payload: { word, isTrap, isDeadEnd, endingSyllable }
+        payload: { word, isTrap, isDeadEnd, endingSyllable, senderId: myPlayerId }
       });
     }
   };
@@ -961,12 +1013,36 @@ function GameApp() {
       {/* Floating Reaction Visual Effects (Colors drifting upwards) */}
       <ReactionEffects reactions={floatingReactions} />
 
+      {/* 3-Second Dramatic Synchronized Countdown Overlay */}
+      {gameState.status === 'countdown' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+          <div className="bg-[#FAF8F2] neo-border-thick rounded-3xl p-6 sm:p-10 shadow-neo-xl max-w-sm w-full text-center flex flex-col items-center gap-3 animate-bounce">
+            <span className="text-xs font-black uppercase tracking-widest text-rose-700 bg-rose-100 neo-border px-3.5 py-1 rounded-full">
+              [ PHIÊN TÒA CHUẨN BỊ MỞ ]
+            </span>
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-[#FEE227] neo-border-thick flex items-center justify-center shadow-neo my-1">
+              <span className="text-5xl sm:text-6xl font-black text-black">
+                {gameState.countdownValue || 3}
+              </span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-black uppercase text-black">
+              ĐẾM NGƯỢC XUẤT TRẬN!
+            </h2>
+            <div className="bg-white neo-border rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700">
+              Từ mở đầu: <span className="font-black text-black uppercase underline">{gameState.currentWord}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <TopNavbar
         roomId={gameState.roomId}
         isHost={isHost}
         statusText={
-          gameState.status === 'playing'
+          gameState.status === 'countdown'
+            ? 'Đang đếm ngược vào trận...'
+            : gameState.status === 'playing'
             ? 'Đang giao tranh sinh tử'
             : gameState.status === 'gameover'
             ? 'Kết thúc • Bản án phán quyết'
@@ -975,8 +1051,8 @@ function GameApp() {
         onNewRoom={handleNewRoom}
       />
 
-      {/* Main Content Area: 3 Dedicated Full-Page States */}
-      {gameState.status === 'playing' ? (
+      {/* Main Content Area: Dedicated Views */}
+      {gameState.status === 'playing' || gameState.status === 'countdown' ? (
         <div className="w-full mt-3">
           <GameArena
             gameState={gameState}

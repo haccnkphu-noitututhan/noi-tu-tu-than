@@ -35,11 +35,13 @@ export const GameArena: React.FC<GameArenaProps> = ({
   const prevSyllables = gameState.currentWord ? getSyllables(gameState.currentWord) : [];
   const requiredFirstSyllable = prevSyllables.length > 0 ? prevSyllables[prevSyllables.length - 1] : '';
 
-  // Focus input on my turn
+  // Focus input on my turn safely
   useEffect(() => {
     if (isMyTurn) {
-      inputRef.current?.focus();
       setErrorMessage('');
+      if (window.innerWidth > 640) {
+        inputRef.current?.focus();
+      }
     }
   }, [isMyTurn]);
 
@@ -48,11 +50,11 @@ export const GameArena: React.FC<GameArenaProps> = ({
     e.preventDefault();
     if (!isMyTurn) return;
 
-    let candidate = inputWord.trim().toLowerCase();
+    let candidate = inputWord.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
     if (!candidate) return;
     
     // If user only typed 1 word (suffix) and we have a required syllable, auto-prepend it
-    const parts = candidate.split(' ').filter(Boolean);
+    const parts = candidate.split(/\s+/).filter(Boolean);
     if (parts.length === 1 && requiredFirstSyllable) {
       candidate = `${requiredFirstSyllable} ${parts[0]}`;
     }
@@ -75,7 +77,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full flex flex-col gap-4 pb-16 sm:pb-8">
       {/* Top Match Bar: Mode, Live Score & Quit Button */}
       <div className="w-full bg-white neo-border-thick rounded-3xl p-3 sm:p-4 shadow-neo flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -186,29 +188,34 @@ export const GameArena: React.FC<GameArenaProps> = ({
         <div className="w-full max-w-lg mt-5">
           {isMyTurn ? (
             <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                {/* Locked Prefix Syllable Pill if required */}
-                {requiredFirstSyllable ? (
-                  <div className="shrink-0 bg-[#FEE227] text-black neo-border-thick rounded-full px-4 py-3 font-black text-sm sm:text-base uppercase flex items-center gap-1 shadow-neo-sm select-none">
-                    <span className="text-[10px] text-gray-700 font-extrabold block sm:hidden">TIỀN TỐ:</span>
-                    <span>{requiredFirstSyllable.toUpperCase()}</span>
-                  </div>
-                ) : null}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
+                  {/* Locked Prefix Syllable Pill if required */}
+                  {requiredFirstSyllable ? (
+                    <div className="shrink-0 bg-[#FEE227] text-black neo-border-thick rounded-xl sm:rounded-full px-3 py-2 sm:px-4 sm:py-3 font-black text-xs sm:text-base uppercase flex items-center shadow-neo-sm select-none">
+                      <span>{requiredFirstSyllable.toUpperCase()}</span>
+                    </div>
+                  ) : null}
 
-                {/* Suffix input field */}
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputWord}
-                  onChange={(e) => setInputWord(e.target.value)}
-                  placeholder={requiredFirstSyllable ? 'Nhập từ đuôi (VD: nuối)...' : 'Nhập từ 2 chữ mở đầu (VD: tử thần)...'}
-                  className="w-full neo-border-thick bg-white rounded-full px-5 py-3 text-sm sm:text-base font-black text-black placeholder:text-gray-400 focus:outline-none focus:bg-amber-50 shadow-neo-sm"
-                />
+                  {/* Suffix input field */}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    autoCapitalize="none"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    value={inputWord}
+                    onChange={(e) => setInputWord(e.target.value)}
+                    placeholder={requiredFirstSyllable ? 'Gõ từ đuôi (VD: nuối)...' : 'Gõ từ 2 chữ mở đầu (VD: tử thần)...'}
+                    className="w-full neo-border-thick bg-white rounded-full px-4 sm:px-5 py-2.5 sm:py-3 text-base font-black text-black placeholder:text-gray-400 focus:outline-none focus:bg-amber-50 shadow-neo-sm min-w-0"
+                  />
+                </div>
 
                 {/* Submit button */}
                 <button
                   type="submit"
-                  className="neo-btn bg-[#10B981] hover:bg-emerald-600 text-white px-5 sm:px-6 py-3 rounded-full text-xs sm:text-sm font-black uppercase shrink-0 flex items-center gap-1 cursor-pointer"
+                  className="neo-btn bg-[#10B981] hover:bg-emerald-600 text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-black uppercase shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-neo-sm"
                 >
                   <span>[ BẮN ]</span>
                   <Send className="w-4 h-4" />

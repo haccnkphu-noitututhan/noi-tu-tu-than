@@ -149,11 +149,11 @@ export class P2PNetwork {
     });
   }
 
-  // Host broadcasts to all clients
-  public static broadcast(msg: NetworkMessage) {
+  // Host broadcasts to all clients (can exclude sender)
+  public static broadcast(msg: NetworkMessage, excludePeerId?: string) {
     if (!this.isHost) return;
-    this.connections.forEach((conn) => {
-      if (conn.open) {
+    this.connections.forEach((conn, peerId) => {
+      if (conn.open && peerId !== excludePeerId) {
         conn.send(msg);
       }
     });
