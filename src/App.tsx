@@ -701,15 +701,27 @@ function GameApp() {
           AudioManager.playTick(2);
         }
 
-        return {
+        const tickedState: GameState = {
           ...prev,
           turnTimeLeft: prev.turnTimeLeft - 1,
         };
+        // Continuous sync tick: Broadcasts every second so all mobile devices stay 100% in lockstep!
+        P2PNetwork.broadcast({ type: 'STATE_UPDATE', state: tickedState });
+        return tickedState;
       });
     }, 1000);
 
     return () => clearInterval(timer);
   }, [gameState.status, isHost]);
+
+  // Continuous background sync in lobby so all players are 100% in lockstep
+  useEffect(() => {
+    if (gameState.status !== 'lobby' || !isHost) return;
+    const lobbyTimer = setInterval(() => {
+      P2PNetwork.broadcast({ type: 'STATE_UPDATE', state: gameState });
+    }, 2000);
+    return () => clearInterval(lobbyTimer);
+  }, [gameState.status, isHost, gameState]);
 
   // Handle Bot Turn automatically
   useEffect(() => {
