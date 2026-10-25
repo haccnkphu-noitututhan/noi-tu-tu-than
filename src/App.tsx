@@ -849,6 +849,7 @@ function GameApp() {
           {/* Room Manager Bar */}
           <RoomManagerBar
             currentRoomId={gameState.roomId}
+            inviterName={myName}
             onJoinRoom={handleJoinRoom}
           />
 

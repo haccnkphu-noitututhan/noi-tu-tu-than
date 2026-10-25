@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Copy, Check, ArrowRight } from 'lucide-react';
+import { Copy, Check, ArrowRight, Sparkles } from 'lucide-react';
 
 interface RoomManagerBarProps {
   currentRoomId: string;
+  inviterName?: string;
   onJoinRoom: (targetRoomId: string) => void;
 }
 
 export const RoomManagerBar: React.FC<RoomManagerBarProps> = ({
   currentRoomId,
+  inviterName,
   onJoinRoom,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -15,9 +17,20 @@ export const RoomManagerBar: React.FC<RoomManagerBarProps> = ({
 
   const handleCopyLink = () => {
     const url = `${window.location.origin}${window.location.pathname}?room=${currentRoomId}`;
-    navigator.clipboard.writeText(url);
+    const author = inviterName ? inviterName : 'Một đấu sĩ bí ẩn';
+
+    const uniqueInviteMessage = `[ TRÁT TRIỆU TẬP: NỐI TỪ TỬ THẦN ]
+Bạn đã được mời tham gia Đấu Trường Nối Từ Sinh Tử (Phòng: ${currentRoomId})!
+• Người thách đấu: ${author}
+• Luật chơi: 3 tim đếm ngược, nối từ thần tốc, dính bẫy tử thần là mất mạng!
+• Bản án: Kẻ đứng bét bảng sẽ phải thi hành hình phạt trước hội đồng!
+
+Nhấp link để bước lên sàn đấu ngay:
+${url}`;
+
+    navigator.clipboard.writeText(uniqueInviteMessage);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 3000);
   };
 
   const handleJoin = (e: React.FormEvent) => {
@@ -29,7 +42,7 @@ export const RoomManagerBar: React.FC<RoomManagerBarProps> = ({
   };
 
   return (
-    <div className="w-full bg-white neo-border-thick rounded-3xl p-2.5 sm:p-3.5 shadow-neo flex flex-col md:flex-row md:items-center justify-between gap-3">
+    <div className="w-full bg-white neo-border-thick rounded-3xl p-3 sm:p-4 shadow-neo flex flex-col md:flex-row md:items-center justify-between gap-3">
       {/* Left: Current room + Copy Link button */}
       <div className="flex flex-wrap items-center gap-2.5">
         <div className="neo-border bg-gray-50 rounded-full px-4 py-1.5 text-xs sm:text-sm font-black uppercase text-gray-800">
@@ -38,10 +51,21 @@ export const RoomManagerBar: React.FC<RoomManagerBarProps> = ({
 
         <button
           onClick={handleCopyLink}
-          className="neo-btn flex items-center gap-1.5 bg-[#10B981] text-white px-4 py-1.5 rounded-full text-xs sm:text-sm font-black uppercase cursor-pointer hover:bg-emerald-600"
+          className="neo-btn flex items-center gap-1.5 bg-[#10B981] hover:bg-emerald-600 text-white px-4 py-1.5 rounded-full text-xs sm:text-sm font-black uppercase cursor-pointer"
+          title="Sao chép lời mời độc đáo kèm link gửi cho bạn bè"
         >
-          {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-          <span>{copied ? '[ ĐÃ SAO CHÉP LINK! ]' : '[ SAO CHÉP LINK MỜI BẠN BÈ ]'}</span>
+          {copied ? (
+            <>
+              <Check className="w-3.5 h-3.5" strokeWidth={3} />
+              <span>[ ĐÃ CHÉP LỜI MỜI ĐỘC ĐÁO! ]</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-3.5 h-3.5" />
+              <Copy className="w-3.5 h-3.5" />
+              <span>[ SAO CHÉP LỜI MỜI BẠN BÈ ]</span>
+            </>
+          )}
         </button>
       </div>
 
@@ -56,7 +80,7 @@ export const RoomManagerBar: React.FC<RoomManagerBarProps> = ({
         />
         <button
           type="submit"
-          className="neo-btn flex items-center gap-1 bg-[#FEE227] text-black px-4 py-1.5 rounded-full text-xs sm:text-sm font-black uppercase hover:bg-yellow-400 cursor-pointer"
+          className="neo-btn flex items-center gap-1 bg-[#FEE227] hover:bg-yellow-400 text-black px-4 py-1.5 rounded-full text-xs sm:text-sm font-black uppercase cursor-pointer"
         >
           <span>[ VÀO PHÒNG ]</span>
           <ArrowRight className="w-3.5 h-3.5" />
