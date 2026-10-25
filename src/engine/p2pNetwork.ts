@@ -7,7 +7,8 @@ export type NetworkMessage =
   | { type: 'PLAYER_ACTION'; action: string; payload: any }
   | { type: 'REACTION'; effectType: string; authorName: string }
   | { type: 'CHAT_MESSAGE'; message: any }
-  | { type: 'JOIN_REQUEST'; player: { id: string; name: string; avatar: string } };
+  | { type: 'JOIN_REQUEST'; player: { id: string; name: string; avatar: string } }
+  | { type: 'LEAVE_REQUEST'; playerId: string };
 
 const PEER_CONFIG = {
   debug: 1,
@@ -152,6 +153,14 @@ export class P2PNetwork {
         conn.send(msg);
       }
     });
+  }
+
+  // Host sends message to a specific client peer
+  public static sendToPeer(peerId: string, msg: NetworkMessage) {
+    const conn = this.connections.get(peerId);
+    if (conn && conn.open) {
+      conn.send(msg);
+    }
   }
 
   // Client sends to Host

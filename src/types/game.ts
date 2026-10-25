@@ -44,4 +44,6 @@ export interface GameState {
   turnDirection: 1 | -1;
   winner?: Player;
   trapWordsSecret: string[];
+  activePunishment?: string;
+  roundPunishments?: string[];
 }
